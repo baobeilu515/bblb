@@ -1,0 +1,55 @@
+# OKTI 图像编码与解码
+
+本项目根据 ZIP 中的 `AssignmentDescription_Encoder.pdf` 与 `AssignmentDescription_Decoder.pdf`，实现 OKTI 文本图像的编码和解码。编码器读取 8 位 P3/P6 PPM，生成 `output.okti`；解码器把 OKTI 转成 P6 PPM。
+
+## 输入输出示例
+
+运行 `python src/main.py tests/data/tiny.ppm`。`tiny.ppm` 是 2×2 RGB 图像，程序会生成：
+
+```text
+okti
+2 2
+pff0000
+pffffff
+p00ff00
+p0000ff
+```
+
+解码示例：
+
+```text
+python src/main.py --decode output.okti decoded.ppm
+```
+
+编码器打印输入 PPM 与输出 OKTI 的字节数、净缩减字节和百分比。实测样例汇总见 [test-results.md](results/test-results.md)。
+
+## 运行
+
+```text
+python src/main.py tests/data/tiny.ppm
+python src/main.py --decode output.okti decoded.ppm
+python -m unittest discover -s tests -v
+```
+
+编码命令不带文件名时会提示输入路径；多余命令行参数会报错退出。程序尝试用 Tkinter 显示图像；没有图形桌面的环境会提示预览不可用，但仍完成文件编码/解码。
+
+## 通俗实现思路
+
+像素从左到右、从上到下处理。每个像素优先编码为前一像素的重复（`r`/`R`），再尝试 256 项唯一颜色历史表里的索引（`i`/`I`），然后尝试与前一像素的 RGB 差分（`d`），都不适用时写完整 RGB（`p`）。差分通道的偏置为 8。历史表初始有黑色；新增颜色移到表首、去重，最多保留 256 项。
+
+解码器按 token 的固定长度读取数据，因此也接受 token 之间没有换行的文件。容易出错的地方包括：首像素前的默认颜色是黑色；运行数表示“额外复制”像素；长运行最多编码 255 个额外像素并拆段；历史表索引在读入颜色后会改变。非法文件头、尺寸和未知像素类型都会产生易定位的错误；未知类型错误包含行号和原行文本。
+
+## 自测和实际结果
+
+测试样例来自用户 ZIP 的 `main_task2/images`，选取 7 个小型 PPM 文件放在 `tests/data/`。为便于以普通文本上传测试集，这些夹具保存为与原图像素完全相同的 ASCII P3 PPM；体积表记录的是 ZIP 原始 P6 文件的实际编码结果。实际运行 Python 3.14.10 后，7 项单元测试通过；还对全部七个原始样例执行了命令行编码，并对其中一个样例执行编码到解码的端到端回环，源 P6 与解码 P6 的 SHA-256 相同。具体测试结果、体积变化和运行时限制见 [测试结果记录](results/test-results.md)。
+
+**没有官方 `.okti` 期望输出文件。** ZIP 只含 PPM/PNG 图像；`tiny.ppm` 的编码结果根据 PDF 中给出的四像素示例精确断言，其余样例用编码后再解码的像素一致性检查。
+
+## 拓展功能与限制
+
+- 拓展功能：运行时报告输入、输出字节数和缩减比例，便于量化压缩效果；解码器允许 token 之间省略换行，利用 token 固定长度解析文本流。
+- 已实现：OKTI 编码和解码、P3/P6 PPM 读写、像素类型和尺寸校验、命令行参数处理、字节统计、自测。
+- 未完成/未验证：PNG 输入、SimpleGraphics 预览集成，以及与官方 `.okti` 文件逐字节对比。课程说明允许只支持 PPM。本实现尝试用 Python 自带 Tkinter 预览；当前便携测试运行时不含 Tkinter，预览结果未验证，编码/解码命令正常。
+- `src/main.py` 顶部学生姓名和学号仍是占位符，请在提交前填入本人信息。
+- ZIP 中作业 PDF 提到大型语言模型使用限制，而你提供的自学建议截图鼓励用 AI。你确认本任务允许使用 AI，因此按你的确认继续；提交前建议以项目最新说明为准。
+- 当前目录保留了实测生成的 `output.okti`（混合短运行与索引样例）和 `roundtrip.ppm`（解码后的同像素 P3 图像）。
